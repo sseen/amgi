@@ -155,7 +155,15 @@ struct SyncSheet: View {
         do {
             let summary = try await syncClient.sync()
             syncState = .syncing("Syncing media...")
-            _ = try? await syncClient.syncMedia()
+            // Surface media-sync failures instead of swallowing them: the
+            // collection already synced, so report the media error without
+            // discarding that success.
+            do {
+                _ = try await syncClient.syncMedia()
+            } catch {
+                syncState = .error("Media sync failed: \(error.localizedDescription)")
+                return
+            }
             syncState = .success(summary)
         } catch let syncError as SyncError where syncError == .authFailed {
             showLogin = true

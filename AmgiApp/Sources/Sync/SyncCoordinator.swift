@@ -116,7 +116,27 @@ final class SyncCoordinator {
             do {
                 let summary = try await client.sync()
                 await MainActor.run {
-                    self.appendLog("Sync complete: \(summary.cardsPushed) pushed, \(summary.cardsPulled) pulled")
+                    self.appendLog("Collection sync complete: \(summary.cardsPushed) pushed, \(summary.cardsPulled) pulled")
+                    self.state = .syncing(message: "Syncing media…")
+                }
+
+                // Media files (audio/images) sync over a channel separate from
+                // the collection, so they must be pulled explicitly here —
+                // otherwise cards reference files that were never downloaded
+                // and every one shows up as "missing". A media failure is
+                // surfaced via the log but must not undo a collection sync that
+                // already succeeded.
+                do {
+                    _ = try await client.syncMedia()
+                    await MainActor.run { self.appendLog("Media sync complete") }
+                } catch {
+                    await MainActor.run {
+                        self.appendLog("Media sync failed: \(error.localizedDescription)", level: .error)
+                    }
+                }
+
+                await MainActor.run {
+                    self.appendLog("Sync complete")
                     self.state = .success(summary)
                     self.$lastSyncedAtUnix.withLock { $0 = Date().timeIntervalSince1970 }
                     self.$needsFullSyncFlag.withLock { $0 = false }
