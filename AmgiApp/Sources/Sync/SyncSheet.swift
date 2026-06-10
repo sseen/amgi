@@ -160,6 +160,8 @@ struct SyncSheet: View {
             // discarding that success.
             do {
                 _ = try await syncClient.syncMedia()
+            } catch is CancellationError {
+                return
             } catch {
                 syncState = .error("Media sync failed: \(error.localizedDescription)")
                 return

@@ -130,12 +130,19 @@ final class SyncCoordinator {
                     _ = try await client.syncMedia()
                     await MainActor.run { self.appendLog("Media sync complete") }
                 } catch {
+                    // Cancellation must reach the outer catch, which checks
+                    // activeTask — swallowing it here would let the success
+                    // block below overwrite the cancelled state.
+                    if error is CancellationError { throw error }
                     await MainActor.run {
                         self.appendLog("Media sync failed: \(error.localizedDescription)", level: .error)
                     }
                 }
 
                 await MainActor.run {
+                    // If cancel() ran while media was syncing, activeTask is
+                    // already nil — don't overwrite the cancelled state.
+                    guard self.activeTask != nil else { return }
                     self.appendLog("Sync complete")
                     self.state = .success(summary)
                     self.$lastSyncedAtUnix.withLock { $0 = Date().timeIntervalSince1970 }
